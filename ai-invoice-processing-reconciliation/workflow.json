@@ -1,0 +1,972 @@
+{
+  "name": "Invoice Processing & Reconciliation System",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {},
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        -240
+      ],
+      "id": "c6374999-abb9-4503-8e83-072298fc95fc",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "v2nOX9y78Ez1Y6Lq",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.text }}",
+        "schemaType": "manual",
+        "inputSchema": "\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"companyName\": {\n      \"type\": [\"string\", \"null\"],\n      \"description\": \"Name of the seller or invoice issuer. Null if missing.\"\n    },\n    \"invoiceNumber\": {\n      \"type\": [\"string\", \"null\"],\n      \"description\": \"Invoice number explicitly shown in the document. Never invent.\"\n    },\n    \"poNumber\": {\n      \"type\": [\"string\", \"null\"],\n      \"description\": \"Purchase Order number explicitly stated under PO No., Purchase Order No., or Buyer's Order No. Return null if blank, missing or unclear. NEVER fabricate a PO number or copy an invoice/reference number.\"\n    },\n    \"invoiceDate\": {\n      \"type\": [\"string\", \"null\"],\n      \"description\": \"Invoice date in YYYY-MM-DD format. Null if unavailable.\"\n    },\n    \"items\": {\n      \"type\": \"array\",\n      \"description\": \"List of distinct invoice products. Do not duplicate items from duplicate invoice copies.\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"productName\": {\n            \"type\": [\"string\", \"null\"],\n            \"description\": \"Product name as stated in the invoice.\"\n          },\n          \"quantity\": {\n            \"type\": [\"number\", \"null\"],\n            \"description\": \"Numeric product quantity.\"\n          },\n          \"unit\": {\n            \"type\": [\"string\", \"null\"],\n            \"description\": \"Unit of measurement such as pcs, pairs, kg or nos.\"\n          },\n          \"unitPrice\": {\n            \"type\": [\"number\", \"null\"],\n            \"description\": \"Price per unit, excluding GST unless otherwise specified.\"\n          },\n          \"totalPrice\": {\n            \"type\": [\"number\", \"null\"],\n            \"description\": \"Line item amount as stated, or calculated from explicit quantity and unit price when unambiguous.\"\n          }\n        },\n        \"required\": [\n          \"productName\",\n          \"quantity\",\n          \"unit\",\n          \"unitPrice\",\n          \"totalPrice\"\n        ],\n        \"additionalProperties\": false\n      }\n    },\n    \"subtotal\": {\n      \"type\": [\"number\", \"null\"],\n      \"description\": \"Total taxable amount before GST. Null if unavailable.\"\n    },\n    \"gst\": {\n      \"type\": [\"number\", \"null\"],\n      \"description\": \"Total GST amount. Add CGST and SGST, or use IGST as applicable. Never double-count taxes. Null if undeterminable.\"\n    },\n    \"grandTotal\": {\n      \"type\": [\"number\", \"null\"],\n      \"description\": \"Final payable invoice amount including taxes and applicable charges.\"\n    },\n    \"currency\": {\n      \"type\": [\"string\", \"null\"],\n      \"description\": \"Three-letter currency code such as INR, USD or EUR. Null if unknown.\"\n    }\n  },\n  \"required\": [\n    \"companyName\",\n    \"invoiceNumber\",\n    \"poNumber\",\n    \"invoiceDate\",\n    \"items\",\n    \"subtotal\",\n    \"gst\",\n    \"grandTotal\",\n    \"currency\"\n  ],\n  \"additionalProperties\": false\n}\n",
+        "options": {
+          "systemPromptTemplate": "You are an invoice data extraction assistant.\n\nExtract invoice information from the provided PDF text into the exact Structured Output Parser schema.\n\nInvoice formats vary by sender. Identify fields by their meaning, not their position or layout.\n\nRules:\n1. Extract companyName (seller), invoiceNumber, poNumber, invoiceDate, items, subtotal, gst, grandTotal and currency.\n2. For each item extract productName, quantity, unit, unitPrice and totalPrice.\n3. Calculate total GST = CGST + SGST, or use IGST if applicable. Sum tax components only once. If total GST is explicitly provided, use it without double-counting.\n4. Use explicit invoice values. Calculate missing amounts only when all required values are available and the calculation is unambiguous.\n5. Convert dates to YYYY-MM-DD and monetary amounts to numbers.\n6. Return actual null for missing or uncertain values. Never guess, assume or fabricate data.\n7. If no items are found, return an empty items array.\n8. If the document contains Original/Duplicate/Triplicate copies of the same invoice, extract only once.\n\n9. STRICT PO NUMBER EXTRACTION:\n\nExtract poNumber ONLY when an explicit Purchase Order number is present in the invoice.\n\nLook for labels such as \"PO Number\", \"PO No.\", \"Purchase Order No.\" or \"Buyer's Order No.\"\n\nIf the field is blank, missing or unclear, return JSON null.\n\nNEVER generate, predict or fabricate a PO number.\n\nNEVER use invoice numbers, reference numbers or delivery note numbers as PO numbers.\n\nA missing PO number is completely valid and must remain null.\n\nExample: \"poNumber\": null\n10. Follow the output schema exactly. Return only structured JSON, without explanations."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        -240
+      ],
+      "id": "d53baae9-ef2c-474f-bfc4-cce8920703b9",
+      "name": "Information Extractor"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        520,
+        -8
+      ],
+      "id": "67cb805c-97ad-4d77-bec4-67d9ec6acc86",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "attachment_0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        -240
+      ],
+      "id": "12156963-f16d-40af-bdb9-1f9235662bca",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "71acdc1e-abfe-447c-91de-0d261ed09b89",
+              "leftValue": "={{ $('Information Extractor').item.json.output.poNumber }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "4354989e-246a-4949-9304-f08afbe13ce9",
+              "leftValue": "={{ $('Information Extractor').item.json.output.poNumber }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "b272fb92-e88f-46dd-80f7-eb498dd0f1a5",
+              "leftValue": "={{ $('Information Extractor').item.json.output.poNumber }}",
+              "rightValue": "null",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        -336
+      ],
+      "id": "433d8baa-0726-4b8c-99a4-33b564457d87",
+      "name": "If",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "get",
+        "projectRef": "deondyzmwicggvjtngui",
+        "tableId": "purchaseorders",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "po_number",
+              "keyValue": "=PO-301"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1472,
+        -144
+      ],
+      "id": "fca84297-a091-4e35-bc2c-281d038904db",
+      "name": "Get a row",
+      "alwaysOutputData": true,
+      "executeOnce": false,
+      "credentials": {
+        "supabaseOAuth2Api": {
+          "id": "2T8HArISumqgW6u2",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst invoice = $('Information Extractor').first().json.output;\nconst po = $input.first().json;\n\n// Normalize product and supplier names\nconst normalize = (value) =>\n  String(value ?? \"\")\n    .toLowerCase()\n    .replace(/&/g, \" and \")\n    .replace(/[^a-z0-9]/g, \"\");\n\n// Convert monetary values\nconst amount = (value) => {\n  if (value === null || value === undefined || value === \"\") {\n    return null;\n  }\n\n  const num = Number(value);\n  return Number.isFinite(num) ? num : null;\n};\n\n// Compare numeric values to 2 decimal places\nconst sameAmount = (a, b) => {\n  const x = amount(a);\n  const y = amount(b);\n\n  return x !== null &&\n    y !== null &&\n    Math.abs(x - y) < 0.01;\n};\n\n// Check if PO exists\nif (!po.id) {\n  return [{\n    json: {\n      status: \"PO Not Found\",\n      allMatch: false,\n      message: \"No matching purchase order found.\"\n    }\n  }];\n}\n\n// Supplier and currency validation\nconst supplierMatch = normalize(invoice.companyName) !== \"\" &&\n  normalize(invoice.companyName) === normalize(po.company_name);\n\n\n// Compare invoice products against PO products\nconst invoiceItems = invoice.items ?? [];\nconst poItems = Array.isArray(po.items) ? po.items : [];\n\nconst usedPoIndexes = new Set();\nconst itemResults = [];\n\nfor (const item of invoiceItems) {\n\n  const matchIndex = poItems.findIndex((p, index) =>\n    !usedPoIndexes.has(index) &&\n    normalize(p.productName) !== \"\" &&\n    normalize(p.productName) === normalize(item.productName)\n  );\n\n  if (matchIndex === -1) {\n    itemResults.push({\n      productName: item.productName,\n      status: \"Product Not Found\",\n      matched: false\n    });\n    continue;\n  }\n\n  usedPoIndexes.add(matchIndex);\n\n  const poItem = poItems[matchIndex];\n\n  const quantityMatch = sameAmount(\n    item.quantity,\n    poItem.quantity\n  );\n\n  const unitMatch = normalize(item.unit) !== \"\" &&\n    normalize(item.unit) === normalize(poItem.unit);\n\n  const unitPriceMatch = sameAmount(\n    item.unitPrice,\n    poItem.unitPrice\n  );\n\n  const totalPriceMatch = sameAmount(\n    item.totalPrice,\n    poItem.totalPrice\n  );\n\n  const matched =\n    quantityMatch &&\n    unitMatch &&\n    unitPriceMatch &&\n    totalPriceMatch;\n\n  itemResults.push({\n    productName: item.productName,\n    poProductName: poItem.productName,\n    quantityMatch,\n    unitMatch,\n    unitPriceMatch,\n    totalPriceMatch,\n    matched,\n    status: matched ? \"Matched\" : \"Mismatch\",\n    invoiceValues: item,\n    poValues: poItem\n  });\n}\n\n// PO products not represented in the invoice\nconst unmatchedPoItems = poItems\n  .filter((_, index) => !usedPoIndexes.has(index))\n  .map(p => p.productName);\n\n// Compare invoice totals\nconst subtotalMatch = sameAmount(\n  invoice.subtotal,\n  po.subtotal\n);\n\nconst gstMatch = sameAmount(\n  invoice.gst,\n  po.gst\n);\n\nconst grandTotalMatch = sameAmount(\n  invoice.grandTotal,\n  po.grand_total\n);\n\nconst itemsMatch =\n  itemResults.length > 0 &&\n  itemResults.every(item => item.matched) &&\n  unmatchedPoItems.length === 0;\n\n// Final validation\nconst allMatch =\n  supplierMatch &&\n  itemsMatch &&\n  subtotalMatch &&\n  gstMatch &&\n  grandTotalMatch;\n\nreturn [{\n  json: {\n    status: allMatch ? \"Matched\" : \"Mismatch\",\n    allMatch,\n    supplierMatch,\n    itemsMatch,\n    subtotalMatch,\n    gstMatch,\n    grandTotalMatch,\n    itemResults,\n    unmatchedPoItems,\n    differences: {\n      subtotal: {\n        invoice: invoice.subtotal,\n        supabase: po.subtotal\n      },\n      gst: {\n        invoice: invoice.gst,\n        supabase: po.gst\n      },\n      grandTotal: {\n        invoice: invoice.grandTotal,\n        supabase: po.grand_total\n      }\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        -144
+      ],
+      "id": "b30e7843-3d5e-467b-bd39-3f391341f395",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4fe1d9e1-4367-4712-8f7e-dc615613e7d7",
+              "leftValue": "={{ $json.allMatch }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "01e64c0c-e7cc-4e32-83d9-9c8d6f656072",
+              "leftValue": "={{ $json.poFound }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        -144
+      ],
+      "id": "8ec5f0e7-6189-42ab-bdd1-5867259ad34b",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "projectRef": "deondyzmwicggvjtngui",
+        "tableId": "invoices",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "company_name",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.companyName }}"
+            },
+            {
+              "fieldId": "invoice_number",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.invoiceNumber }}"
+            },
+            {
+              "fieldId": "po_number",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.poNumber }}"
+            },
+            {
+              "fieldId": "invoice_date",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.invoiceDate }}"
+            },
+            {
+              "fieldId": "items",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.items.map(p => `${p.productName} - ${p.quantity} ${p.unit} × ₹${p.unitPrice} = ₹${p.totalPrice}`).join('\\n') }}"
+            },
+            {
+              "fieldId": "subtotal",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.subtotal }}"
+            },
+            {
+              "fieldId": "gst",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.gst }}"
+            },
+            {
+              "fieldId": "grand_total",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.grandTotal }}"
+            },
+            {
+              "fieldId": "Payment Status",
+              "fieldValue": "Approved"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2144,
+        -48
+      ],
+      "id": "70b71047-97b1-4fd8-b2f8-dc5cf1b24300",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseOAuth2Api": {
+          "id": "2T8HArISumqgW6u2",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "get",
+        "projectRef": "deondyzmwicggvjtngui",
+        "tableId": "invoices",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "invoice_number",
+              "keyValue": "={{ $json.output.invoiceNumber }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        800,
+        -240
+      ],
+      "id": "87eb803c-50a0-48fa-a245-5e538447103c",
+      "name": "Get a row1",
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseOAuth2Api": {
+          "id": "2T8HArISumqgW6u2",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "U0C3XBKPEBT",
+          "mode": "list",
+          "cachedResultName": "Krish Jain (@lodha9krish)"
+        },
+        "text": "=The {{ $json.invoice_number }} already exists, kindly check database",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1248,
+        -144
+      ],
+      "id": "65df0178-cd7f-4fdd-8ab3-0308bd80215c",
+      "name": "Send a message2",
+      "webhookId": "00f1d6a7-fc18-4bc5-8fbf-3704f5513fec",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "cduTMzEJp9schR5x",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3e3d882c-344e-48eb-9785-4e7924ce21bf",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2368,
+        -240
+      ],
+      "id": "5f844345-60d4-4b3f-904e-a49887303ab4",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "sendAndWait",
+        "user": {
+          "__rl": true,
+          "value": "U0C3XBKPEBT",
+          "mode": "list",
+          "cachedResultName": "Krish Jain (@lodha9krish)"
+        },
+        "message": "=\n{{ $json.status === \"PO Not Found\"\n  ? `Dear Team,\n\nNo Purchase Order was found for the submitted invoice.\n\nKindly verify the invoice and provide the corresponding Purchase Order before further processing.\n\nRegards,\nAccounts Team`\n\n  : `Dear Team,\n\nDiscrepancies have been identified between the invoice and PO records. Kindly review and verify the following amounts:\n\nSubtotal:\nInvoice: ₹${$json.differences.subtotal.invoice}\nPO: ₹${$json.differences.subtotal.supabase}\n\nGST:\nInvoice: ₹${$json.differences.gst.invoice}\nPO: ₹${$json.differences.gst.supabase}\n\nGrand Total:\nInvoice: ₹${$json.differences.grandTotal.invoice}\nPO: ₹${$json.differences.grandTotal.supabase}\n\nPlease cross-check the invoice against the corresponding PO and confirm the correct amounts before further processing.\n\nRegards,\nAccounts Team`\n}}\n",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        2144,
+        -240
+      ],
+      "id": "725ee7fc-c00e-43c6-887f-df0da230ff92",
+      "name": "Purchase department approval",
+      "webhookId": "5a2b828c-0fd2-4807-a59f-1b9daed48075",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "cduTMzEJp9schR5x",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "U0C4P8D2ZGQ",
+          "mode": "list",
+          "cachedResultName": "Pramila Jain (@pramilajain91177)"
+        },
+        "text": "You can proceed with the payment of the invoice against the PO",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        2592,
+        -336
+      ],
+      "id": "f2453eac-dfa5-4b01-a0f7-ecb153e2f56a",
+      "name": "Accounts department",
+      "webhookId": "9853d2ad-4ed3-4e76-93a2-1d9f01915953",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "cduTMzEJp9schR5x",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Gmail Trigger').item.json.from.value[0].address }}",
+        "subject": "Discrepancy in Price",
+        "message": "=Hello,\nDiscrepancies have been identified between the invoice and PO records. Kindly review and verify the following amounts:  \n| Particulars | Invoice Amount | PO Amount | |---|---:|---:| | Subtotal | ₹ {{ $json.differences.subtotal.invoice }}| ₹{{ $json.differences.subtotal.supabase }} | | GST | ₹{{ $json.differences.gst.invoice }} | ₹ |{{ $json.differences.gst.supabase }} | Grand Total | ₹{{ $json.differences.grandTotal.invoice }} | ₹{{ $json.differences.grandTotal.supabase }} |  \n\n**All three fields have failed validation.**  Please cross-check the invoice against the corresponding PO and confirm the correct amounts before further processing.  \n\nRegards,",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2592,
+        -144
+      ],
+      "id": "61534af6-0ba6-49cb-aabd-99a621fbc1c9",
+      "name": "Client",
+      "webhookId": "2b839042-b00a-4567-879d-dcb1a586bc90",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "v2nOX9y78Ez1Y6Lq",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "get",
+        "projectRef": "deondyzmwicggvjtngui",
+        "tableId": "invoices",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "invoice_number",
+              "keyValue": "={{ $('Information Extractor').item.json.output.invoiceNumber }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1472,
+        -432
+      ],
+      "id": "4d6747ce-1b57-44eb-8e5c-f978214b4666",
+      "name": "Get a row2",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseOAuth2Api": {
+          "id": "2T8HArISumqgW6u2",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "019ba081-dfaa-4d08-88a0-db91de1ba2b4",
+              "leftValue": "={{ $json.invoice_number == null}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": "=",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1696,
+        -432
+      ],
+      "id": "440552ec-8079-4b4a-9cfe-f3441c762eb8",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "get",
+        "projectRef": "deondyzmwicggvjtngui",
+        "tableId": "invoices",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "invoice_number",
+              "keyValue": "={{ $('Information Extractor').item.json.output.invoiceNumber }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        -336
+      ],
+      "id": "cfa5190f-b64b-45ff-b34a-cf59ad6f7bfb",
+      "name": "Get a row3",
+      "credentials": {
+        "supabaseOAuth2Api": {
+          "id": "2T8HArISumqgW6u2",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Gmail Trigger').item.json.from.value[0].address }}",
+        "subject": "Missing PO Number",
+        "emailType": "text",
+        "message": "=Hello\n\nPlease provide us with a PO no against the INV - {{ $('Information Extractor').item.json.output.invoiceNumber }}. Get in touch with the Purchase department if no PO was provided to you\n\nThanks",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        -528
+      ],
+      "id": "0509d996-81a7-4bc8-a649-d848bf8c17ec",
+      "name": "Supplier",
+      "webhookId": "9a06c9b4-f4f1-4da0-acc0-2325e7433bbc",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "v2nOX9y78Ez1Y6Lq",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cdd9b373-8b1f-4284-958a-a01633179352",
+              "leftValue": "={{ $json.invoice_number != null && String($json.invoice_number) === String($('Information Extractor').first().json.output.invoiceNumber) }}",
+              "rightValue": "=",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1024,
+        -240
+      ],
+      "id": "99aaff28-c90e-4d3c-9183-bf2677321e62",
+      "name": "If4"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "projectRef": "deondyzmwicggvjtngui",
+        "tableId": "invoices",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "company_name",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.companyName }}"
+            },
+            {
+              "fieldId": "invoice_number",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.invoiceNumber }}"
+            },
+            {
+              "fieldId": "po_number",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.poNumber }}"
+            },
+            {
+              "fieldId": "invoice_date",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.invoiceDate }}"
+            },
+            {
+              "fieldId": "items",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.items.map(p => `${p.productName} - ${p.quantity} ${p.unit} × ₹${p.unitPrice} = ₹${p.totalPrice}`).join('\\n') }}"
+            },
+            {
+              "fieldId": "subtotal",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.subtotal }}"
+            },
+            {
+              "fieldId": "gst",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.gst }}"
+            },
+            {
+              "fieldId": "grand_total",
+              "fieldValue": "={{ $('Information Extractor').item.json.output.grandTotal }}"
+            },
+            {
+              "fieldId": "Payment Status",
+              "fieldValue": "Approved"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2816,
+        -336
+      ],
+      "id": "44d8fe4e-d2d1-4ef3-881e-37a535542600",
+      "name": "Create a row2",
+      "credentials": {
+        "supabaseOAuth2Api": {
+          "id": "2T8HArISumqgW6u2",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Information Extractor": [
+      {
+        "json": {
+          "output": {
+            "companyName": "PIYUSH TRADERS",
+            "invoiceNumber": "3402",
+            "poNumber": "PO-301",
+            "invoiceDate": "2025-11-21",
+            "items": [
+              {
+                "productName": "GUMBOOT",
+                "quantity": 50,
+                "unit": "NO’S",
+                "unitPrice": 200,
+                "totalPrice": 10000
+              },
+              {
+                "productName": "FREIGHT",
+                "quantity": 1,
+                "unit": "Services",
+                "unitPrice": 800,
+                "totalPrice": 800
+              }
+            ],
+            "subtotal": 10800,
+            "gst": 644,
+            "grandTotal": 11444,
+            "currency": "INR"
+          }
+        }
+      }
+    ],
+    "Get a row": [
+      {
+        "json": {
+          "id": "3c2f0c74-75d4-4f8f-bef5-916643f7784f",
+          "company_name": "Piyush Traders",
+          "po_number": null,
+          "invoice_date": "2026-10-10",
+          "items": [
+            {
+              "unit": "pcs",
+              "quantity": 100,
+              "unitPrice": 150,
+              "totalPrice": 15000,
+              "productName": "Safety Helmets"
+            }
+          ],
+          "subtotal": 15000,
+          "gst": 2700,
+          "grand_total": 17700,
+          "created_at": "2026-10-16T10:29:20.840772+00:00"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor": {
+      "main": [
+        [
+          {
+            "node": "Get a row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get a row2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a row": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Purchase department approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        []
+      ]
+    },
+    "Get a row1": {
+      "main": [
+        [
+          {
+            "node": "If4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Accounts department",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Purchase department approval": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a row2": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Supplier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get a row3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If4": {
+      "main": [
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accounts department": {
+      "main": [
+        [
+          {
+            "node": "Create a row2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c9b04151-cb48-4417-943b-bd3b3595bb31",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ef947362381a539f542a6b0cf70f00f38cf9d2c5155ea1d501e0700718a68b3e"
+  },
+  "nodeGroups": [],
+  "id": "xApQcd1YFSdedLx1",
+  "tags": []
+}
